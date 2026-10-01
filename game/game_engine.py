@@ -12,9 +12,40 @@ GRAY = (90, 90, 90)
 GREEN = (40, 180, 90)
 BLUE = (50, 90, 170)
 ORANGE = (210, 120, 40)
+DARK_BLUE = (25, 35, 65)
 
 
 class GameEngine:
+    """
+    Controls the reaction-time game.
+
+    Features:
+    - Difficulty selection
+    - Multiple rounds
+    - False-start detection
+    - Reaction-time measurement
+    - Results screen
+    - Replay
+    """
+
+    DIFFICULTIES = {
+        "Easy": {
+            "rounds": 3,
+            "min_wait_ms": 1500,
+            "max_wait_ms": 3000,
+        },
+        "Medium": {
+            "rounds": 5,
+            "min_wait_ms": 1000,
+            "max_wait_ms": 2500,
+        },
+        "Hard": {
+            "rounds": 7,
+            "min_wait_ms": 700,
+            "max_wait_ms": 1800,
+        },
+    }
+
     def __init__(
         self,
         width,
@@ -26,42 +57,114 @@ class GameEngine:
         self.width = width
         self.height = height
 
+        # Default difficulty
+        self.difficulty = "Medium"
+
         self.rounds_total = rounds_total
         self.min_wait_ms = min_wait_ms
         self.max_wait_ms = max_wait_ms
 
-        # Current round
-        self.round = Round(
-            self.min_wait_ms,
-            self.max_wait_ms
-        )
+        # Game states:
+        # menu -> playing -> results
+        self.state = "menu"
 
-        # Stores only valid reaction times
+        self.round = None
         self.reaction_times = []
 
-        # Used to pause briefly after a result/false start
         self.result_shown_at = None
         self.result_pause_ms = 800
 
         # Fonts
         self.font = pygame.font.SysFont("Arial", 30)
         self.big_font = pygame.font.SysFont("Arial", 46)
-        self.small_font = pygame.font.SysFont("Arial", 24)
+        self.title_font = pygame.font.SysFont("Arial", 52)
+        self.small_font = pygame.font.SysFont("Arial", 22)
 
-        # Game completion
-        self.game_over = False
+    # =========================================================
+    # GAME START / REPLAY
+    # =========================================================
 
-    # -----------------------------
-    # Event handling
-    # -----------------------------
+    def start_game(self, difficulty):
+        """
+        Start a new game using the selected difficulty.
+        """
+
+        config = self.DIFFICULTIES[difficulty]
+
+        self.difficulty = difficulty
+
+        self.rounds_total = config["rounds"]
+        self.min_wait_ms = config["min_wait_ms"]
+        self.max_wait_ms = config["max_wait_ms"]
+
+        # Clear previous results
+        self.reaction_times = []
+
+        # Create first round
+        self.round = Round(
+            self.min_wait_ms,
+            self.max_wait_ms
+        )
+
+        self.result_shown_at = None
+
+        self.state = "playing"
+
+    # =========================================================
+    # EVENT HANDLING
+    # =========================================================
 
     def handle_event(self, event):
-        """
-        Handle mouse clicks and SPACE key presses.
-        """
 
-        if self.game_over:
+        # Quit window
+        if event.type == pygame.QUIT:
+            return False
+
+        # Menu
+        if self.state == "menu":
+            self._handle_menu_event(event)
+
+        # Game
+        elif self.state == "playing":
+            self._handle_game_event(event)
+
+        # Results
+        elif self.state == "results":
+            self._handle_results_event(event)
+
+        return True
+
+    # =========================================================
+    # MENU INPUT
+    # =========================================================
+
+    def _handle_menu_event(self, event):
+
+        if event.type != pygame.KEYDOWN:
             return
+
+        # Easy
+        if event.key == pygame.K_1:
+            self.start_game("Easy")
+
+        # Medium
+        elif event.key == pygame.K_2:
+            self.start_game("Medium")
+
+        # Hard
+        elif event.key == pygame.K_3:
+            self.start_game("Hard")
+
+        # Quit
+        elif event.key in (pygame.K_q, pygame.K_ESCAPE):
+            pygame.quit()
+            raise SystemExit
+
+    # =========================================================
+    # GAME INPUT
+    # =========================================================
+
+    def _handle_game_event(self, event):
 
         is_click = event.type == pygame.MOUSEBUTTONDOWN
 
@@ -70,64 +173,89 @@ class GameEngine:
             and event.key == pygame.K_SPACE
         )
 
-        # Ignore unrelated events
         if not (is_click or is_space):
             return
 
-        # Ignore input after a round has already finished
+        # Ignore input after round is finished
         if self.round.state in ("result", "false_start"):
             return
 
-        # Register player input
         reaction_ms = self.round.register_input()
 
-        # ----------------------------------
+        # -----------------------------
         # False start
-        # ----------------------------------
+        # -----------------------------
 
         if reaction_ms is None:
             self.result_shown_at = pygame.time.get_ticks()
             return
 
-        # ----------------------------------
+        # -----------------------------
         # Valid reaction
-        # ----------------------------------
+        # -----------------------------
 
         self.reaction_times.append(reaction_ms)
 
         self.result_shown_at = pygame.time.get_ticks()
 
-    # -----------------------------
-    # Continuous input
-    # -----------------------------
+    # =========================================================
+    # RESULTS INPUT
+    # =========================================================
+
+    def _handle_results_event(self, event):
+
+        if event.type != pygame.KEYDOWN:
+            return
+
+        # Replay Easy
+        if event.key == pygame.K_1:
+            self.start_game("Easy")
+
+        # Replay Medium
+        elif event.key == pygame.K_2:
+            self.start_game("Medium")
+
+        # Replay Hard
+        elif event.key == pygame.K_3:
+            self.start_game("Hard")
+
+        # Return to difficulty menu
+        elif event.key in (pygame.K_r, pygame.K_m):
+            self.state = "menu"
+
+        # Quit
+        elif event.key in (pygame.K_q, pygame.K_ESCAPE):
+            pygame.quit()
+            raise SystemExit
+
+    # =========================================================
+    # CONTINUOUS INPUT
+    # =========================================================
 
     def handle_input(self):
         """
         Reserved for continuously-held-key input.
 
-        Player actions are handled as discrete
-        events in handle_event().
+        Discrete clicks and key presses are handled
+        through handle_event().
         """
         pass
 
-    # -----------------------------
-    # Game update
-    # -----------------------------
+    # =========================================================
+    # UPDATE
+    # =========================================================
 
     def update(self):
-        """
-        Update the current round and move to
-        the next round when necessary.
-        """
 
-        if self.game_over:
+        if self.state != "playing":
             return
 
+        # Update current round
         self.round.update()
 
-        # ----------------------------------
+        # -----------------------------
         # Valid reaction completed
-        # ----------------------------------
+        # -----------------------------
 
         if self.round.state == "result":
 
@@ -140,9 +268,9 @@ class GameEngine:
             ):
                 self._start_next_round()
 
-        # ----------------------------------
+        # -----------------------------
         # False start
-        # ----------------------------------
+        # -----------------------------
 
         elif self.round.state == "false_start":
 
@@ -158,35 +286,30 @@ class GameEngine:
                     self.max_wait_ms
                 )
 
-    # -----------------------------
-    # Start next round
-    # -----------------------------
+    # =========================================================
+    # START NEXT ROUND
+    # =========================================================
 
     def _start_next_round(self):
-        """
-        Start another round or finish the game
-        after all required valid reactions.
-        """
 
-        # All valid rounds are complete.
+        # All required valid rounds completed
         if len(self.reaction_times) >= self.rounds_total:
-            self.game_over = True
+
+            self.state = "results"
+
             return
 
-        # Start a fresh round.
+        # Start another round
         self.round = Round(
             self.min_wait_ms,
             self.max_wait_ms
         )
 
-    # -----------------------------
-    # Statistics
-    # -----------------------------
+    # =========================================================
+    # STATISTICS
+    # =========================================================
 
     def average_reaction_ms(self):
-        """
-        Return the average of valid reaction times.
-        """
 
         if not self.reaction_times:
             return 0
@@ -196,61 +319,166 @@ class GameEngine:
             / len(self.reaction_times)
         )
 
-    # -----------------------------
-    # Rendering
-    # -----------------------------
+    def best_reaction_ms(self):
+
+        if not self.reaction_times:
+            return 0
+
+        return min(self.reaction_times)
+
+    # =========================================================
+    # RENDER
+    # =========================================================
 
     def render(self, screen):
-        """
-        Draw either the current game or
-        the final results screen.
-        """
 
-        # If the game is finished, show results.
-        if self.game_over:
+        if self.state == "menu":
+            self._render_menu(screen)
+
+        elif self.state == "playing":
+            self._render_game(screen)
+
+        elif self.state == "results":
             self._render_game_over(screen)
-            return
 
-        # ----------------------------------
-        # Waiting state
-        # ----------------------------------
+    # =========================================================
+    # MENU SCREEN
+    # =========================================================
 
+    def _render_menu(self, screen):
+
+        screen.fill(DARK_BLUE)
+
+        # Title
+        title = self.title_font.render(
+            "REACTION TIME TESTER",
+            True,
+            WHITE
+        )
+
+        title_rect = title.get_rect(
+            center=(self.width // 2, 65)
+        )
+
+        screen.blit(title, title_rect)
+
+        # Subtitle
+        subtitle = self.font.render(
+            "Choose Difficulty",
+            True,
+            WHITE
+        )
+
+        subtitle_rect = subtitle.get_rect(
+            center=(self.width // 2, 125)
+        )
+
+        screen.blit(subtitle, subtitle_rect)
+
+        # Difficulty options
+        options = [
+            (
+                "1",
+                "Easy",
+                "3 rounds | 1.5 - 3.0 sec"
+            ),
+            (
+                "2",
+                "Medium",
+                "5 rounds | 1.0 - 2.5 sec"
+            ),
+            (
+                "3",
+                "Hard",
+                "7 rounds | 0.7 - 1.8 sec"
+            ),
+        ]
+
+        start_y = 190
+
+        for index, (key, name, description) in enumerate(options):
+
+            y = start_y + index * 65
+
+            option_text = self.font.render(
+                f"[{key}] {name}",
+                True,
+                GREEN if name == self.difficulty else WHITE
+            )
+
+            option_rect = option_text.get_rect(
+                center=(self.width // 2, y)
+            )
+
+            screen.blit(
+                option_text,
+                option_rect
+            )
+
+            description_text = self.small_font.render(
+                description,
+                True,
+                WHITE
+            )
+
+            description_rect = description_text.get_rect(
+                center=(self.width // 2, y + 28)
+            )
+
+            screen.blit(
+                description_text,
+                description_rect
+            )
+
+        # Instructions
+        instructions = self.small_font.render(
+            "Press 1, 2 or 3 to start | Q to quit",
+            True,
+            WHITE
+        )
+
+        instructions_rect = instructions.get_rect(
+            center=(self.width // 2, self.height - 30)
+        )
+
+        screen.blit(
+            instructions,
+            instructions_rect
+        )
+
+    # =========================================================
+    # GAME SCREEN
+    # =========================================================
+
+    def _render_game(self, screen):
+
+        # Waiting
         if self.round.state == "waiting":
 
             bg = GRAY
             message = "Wait for green..."
 
-        # ----------------------------------
-        # GO state
-        # ----------------------------------
-
+        # GO
         elif self.round.state == "go":
 
             bg = GREEN
             message = "Click now!"
 
-        # ----------------------------------
-        # False start state
-        # ----------------------------------
-
+        # False start
         elif self.round.state == "false_start":
 
             bg = ORANGE
             message = "FALSE START!"
 
-        # ----------------------------------
-        # Result state
-        # ----------------------------------
-
+        # Result
         else:
 
             bg = BLUE
             message = f"{self.round.reaction_ms} ms"
 
-        # Draw background
         screen.fill(bg)
 
-        # Draw main message
+        # Main message
         text_surf = self.big_font.render(
             message,
             True,
@@ -269,10 +497,7 @@ class GameEngine:
             text_rect
         )
 
-        # ----------------------------------
-        # Round counter
-        # ----------------------------------
-
+        # Round number
         round_num = min(
             len(self.reaction_times) + 1,
             self.rounds_total
@@ -289,10 +514,7 @@ class GameEngine:
             (10, 10)
         )
 
-        # ----------------------------------
-        # Average reaction time
-        # ----------------------------------
-
+        # Average
         avg_text = self.font.render(
             f"Avg: {self.average_reaction_ms()} ms",
             True,
@@ -307,21 +529,30 @@ class GameEngine:
             )
         )
 
-    # -----------------------------
-    # Game Over Screen
-    # -----------------------------
+        # Difficulty
+        difficulty_text = self.small_font.render(
+            self.difficulty,
+            True,
+            WHITE
+        )
+
+        screen.blit(
+            difficulty_text,
+            (
+                10,
+                self.height - 30
+            )
+        )
+
+    # =========================================================
+    # GAME OVER SCREEN
+    # =========================================================
 
     def _render_game_over(self, screen):
-        """
-        Display the final reaction-time results.
-        """
 
         screen.fill(BLACK)
 
-        # ----------------------------------
         # Title
-        # ----------------------------------
-
         title = self.big_font.render(
             "GAME COMPLETE!",
             True,
@@ -337,31 +568,25 @@ class GameEngine:
             title_rect
         )
 
-        # ----------------------------------
-        # Results heading
-        # ----------------------------------
-
-        results_title = self.font.render(
-            "Reaction Times",
+        # Difficulty
+        difficulty_text = self.font.render(
+            f"{self.difficulty} Mode",
             True,
             GREEN
         )
 
-        results_rect = results_title.get_rect(
-            center=(self.width // 2, 95)
+        difficulty_rect = difficulty_text.get_rect(
+            center=(self.width // 2, 90)
         )
 
         screen.blit(
-            results_title,
-            results_rect
+            difficulty_text,
+            difficulty_rect
         )
 
-        # ----------------------------------
-        # Individual reaction times
-        # ----------------------------------
-
-        start_y = 135
-        line_spacing = 35
+        # Individual results
+        start_y = 125
+        line_spacing = 30
 
         for index, reaction_time in enumerate(
             self.reaction_times,
@@ -386,14 +611,11 @@ class GameEngine:
                 result_rect
             )
 
-        # ----------------------------------
         # Average
-        # ----------------------------------
-
         average_y = (
             start_y
             + self.rounds_total * line_spacing
-            + 15
+            + 10
         )
 
         average_text = self.font.render(
@@ -414,24 +636,40 @@ class GameEngine:
             average_rect
         )
 
-        # ----------------------------------
-        # Exit message
-        # ----------------------------------
-
-        exit_text = self.small_font.render(
-            "Close the window to exit.",
+        # Replay instructions
+        replay_text = self.small_font.render(
+            "1 = Easy   2 = Medium   3 = Hard",
             True,
             WHITE
         )
 
-        exit_rect = exit_text.get_rect(
+        replay_rect = replay_text.get_rect(
             center=(
                 self.width // 2,
-                self.height - 30
+                self.height - 55
             )
         )
 
         screen.blit(
-            exit_text,
-            exit_rect
+            replay_text,
+            replay_rect
+        )
+
+        # Menu / quit instructions
+        menu_text = self.small_font.render(
+            "R = Difficulty Menu   Q = Quit",
+            True,
+            WHITE
+        )
+
+        menu_rect = menu_text.get_rect(
+            center=(
+                self.width // 2,
+                self.height - 25
+            )
+        )
+
+        screen.blit(
+            menu_text,
+            menu_rect
         )
