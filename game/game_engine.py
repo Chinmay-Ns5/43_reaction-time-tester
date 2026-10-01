@@ -46,6 +46,7 @@ class GameEngine:
         # Fonts
         self.font = pygame.font.SysFont("Arial", 30)
         self.big_font = pygame.font.SysFont("Arial", 46)
+        self.small_font = pygame.font.SysFont("Arial", 24)
 
         # Game completion
         self.game_over = False
@@ -77,7 +78,7 @@ class GameEngine:
         if self.round.state in ("result", "false_start"):
             return
 
-        # Register the player's input
+        # Register player input
         reaction_ms = self.round.register_input()
 
         # ----------------------------------
@@ -122,7 +123,6 @@ class GameEngine:
         if self.game_over:
             return
 
-        # Update the current round.
         self.round.update()
 
         # ----------------------------------
@@ -153,7 +153,6 @@ class GameEngine:
                 and now - self.result_shown_at
                 >= self.result_pause_ms
             ):
-                # Restart another round.
                 self.round = Round(
                     self.min_wait_ms,
                     self.max_wait_ms
@@ -203,8 +202,14 @@ class GameEngine:
 
     def render(self, screen):
         """
-        Draw the current game state.
+        Draw either the current game or
+        the final results screen.
         """
+
+        # If the game is finished, show results.
+        if self.game_over:
+            self._render_game_over(screen)
+            return
 
         # ----------------------------------
         # Waiting state
@@ -302,29 +307,131 @@ class GameEngine:
             )
         )
 
+    # -----------------------------
+    # Game Over Screen
+    # -----------------------------
+
+    def _render_game_over(self, screen):
+        """
+        Display the final reaction-time results.
+        """
+
+        screen.fill(BLACK)
+
         # ----------------------------------
-        # Game-over terminal output
+        # Title
         # ----------------------------------
 
-        if (
-            self.game_over
-            and not getattr(
-                self,
-                "_game_over_logged",
-                False
-            )
+        title = self.big_font.render(
+            "GAME COMPLETE!",
+            True,
+            WHITE
+        )
+
+        title_rect = title.get_rect(
+            center=(self.width // 2, 45)
+        )
+
+        screen.blit(
+            title,
+            title_rect
+        )
+
+        # ----------------------------------
+        # Results heading
+        # ----------------------------------
+
+        results_title = self.font.render(
+            "Reaction Times",
+            True,
+            GREEN
+        )
+
+        results_rect = results_title.get_rect(
+            center=(self.width // 2, 95)
+        )
+
+        screen.blit(
+            results_title,
+            results_rect
+        )
+
+        # ----------------------------------
+        # Individual reaction times
+        # ----------------------------------
+
+        start_y = 135
+        line_spacing = 35
+
+        for index, reaction_time in enumerate(
+            self.reaction_times,
+            start=1
         ):
 
-            print(
-                "Session complete! "
-                "Reaction times (ms):",
-                self.reaction_times
+            result_text = self.small_font.render(
+                f"Round {index}: {reaction_time} ms",
+                True,
+                WHITE
             )
 
-            print(
-                "Average:",
-                self.average_reaction_ms(),
-                "ms"
+            result_rect = result_text.get_rect(
+                center=(
+                    self.width // 2,
+                    start_y + (index - 1) * line_spacing
+                )
             )
 
-            self._game_over_logged = True
+            screen.blit(
+                result_text,
+                result_rect
+            )
+
+        # ----------------------------------
+        # Average
+        # ----------------------------------
+
+        average_y = (
+            start_y
+            + self.rounds_total * line_spacing
+            + 15
+        )
+
+        average_text = self.font.render(
+            f"Average: {self.average_reaction_ms()} ms",
+            True,
+            GREEN
+        )
+
+        average_rect = average_text.get_rect(
+            center=(
+                self.width // 2,
+                average_y
+            )
+        )
+
+        screen.blit(
+            average_text,
+            average_rect
+        )
+
+        # ----------------------------------
+        # Exit message
+        # ----------------------------------
+
+        exit_text = self.small_font.render(
+            "Close the window to exit.",
+            True,
+            WHITE
+        )
+
+        exit_rect = exit_text.get_rect(
+            center=(
+                self.width // 2,
+                self.height - 30
+            )
+        )
+
+        screen.blit(
+            exit_text,
+            exit_rect
+        )
